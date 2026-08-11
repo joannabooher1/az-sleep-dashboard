@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Practice KPI Dashboard</title>
+<style>
+  /* ===================== CONFIG (edit per client) ===================== */
+  /* Practice name/logo are set in the JS CONFIG object near the bottom of
+     the <script> block, along with the Apps Script URL for live sync. */
+
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --success-text:   #006300;
+
+    --series-1: #2a78d6; /* blue */
+    --series-2: #eb6834; /* orange */
+    --series-3: #1baf7a; /* aqua */
+    --series-4: #eda100; /* yellow */
+    --series-5: #e87ba4; /* magenta */
+    --series-6: #4a3aa7; /* violet */
+    --series-other: #898781;
+
+    --seq-100: #cde2fb; --seq-250: #86b6ef; --seq-400: #3987e5;
+    --seq-450: #2a78d6; --seq-500: #256abf; --seq-600: #184f95;
+
+    --status-good: #0ca30c;
+    --status-warning: #fab219;
+    --status-serious: #ec835a;
+    --status-critical: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --success-text:   #0ca30c;
+
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --series-3: #199e70;
+      --series-4: #c98500;
+      --series-5: #d55181;
+      --series-6: #9085e9;
+      --series-other: #898781;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page-plane:     #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --success-text:   #0ca30c;
+
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #9085e9;
+    --series-other: #898781;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--page-plane);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--text-primary);
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 20px 64px; }
+
+  /* ---------- header ---------- */
+  .topbar {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .mark {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--series-1), var(--series-3));
+    flex-shrink: 0;
+  }
+  .brand h1 { font-size: 20px; margin: 0; line-height: 1.2; }
+  .brand p { margin: 2px 0 0; color: var(--text-secondary); font-size: 13px; }
+
+  .controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  select, button {
+    font: inherit; font-size: 13px;
+    background: var(--surface-1); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 12px; cursor: pointer;
+  }
+  button:hover, select:hover { border-color: var(--text-muted); }
+  button.primary { background: var(--series-1); color: #fff; border-color: transparent; }
+  .status-pill {
+    font-size: 12px; color: var(--text-secondary);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+  .dot.live { background: var(--status-good); }
+  .dot.demo { background: var(--status-warning); }
+  .dot.error { background: var(--status-critical); }
+
+  /* ---------- sections ---------- */
+  section { margin-bottom: 28px; }
+  h2 { font-size: 15px; margin: 0 0 12px; color: var(--text-primary); }
+  h2 .sub { font-weight: 400; color: var(--text-secondary); font-size: 13px; margin-left: 8px; }
+
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px;
+  }
+
+  /* ---------- stat tiles ---------- */
+  .tile-row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+  }
+  .tile {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 16px;
+  }
+  .tile .label { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+  .tile .value { font-size: 26px; font-weight: 600; line-height: 1.1; }
+  .tile .delta { font-size: 12px; margin-top: 6px; }
+  .tile .delta.up { color: var(--success-text); }
+  .tile .delta.down { color: var(--status-critical); }
+  .tile .delta.flat { color: var(--text-muted); }
+  .tile .rate { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+  /* ---------- chart chrome ---------- */
+  figure { margin: 0; }
+  .chart-card { position: relative; }
+  .chart-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); }
+  .legend .item { display: flex; align-items: center; gap: 6px; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .table-toggle { font-size: 12px; color: var(--text-secondary); background: none; border: none; text-decoration: underline; padding: 0; cursor: pointer; }
+  svg text { fill: var(--text-muted); font-size: 11px; font-family: system-ui, sans-serif; }
+  svg .axis-line { stroke: var(--baseline); stroke-width: 1; }
+  svg .grid-line { stroke: var(--gridline); stroke-width: 1; }
+  svg .val-label { fill: var(--text-secondary); font-size: 11px; }
+
+  .data-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12px; }
+  .data-table th, .data-table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--gridline); }
+  .data-table th { color: var(--text-secondary); font-weight: 600; }
+  .data-table td.num, .data-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .hidden { display: none !important; }
+
+  .tooltip {
+    position: absolute; pointer-events: none; z-index: 10;
+    background: var(--text-primary); color: var(--surface-1);
+    font-size: 11px; padding: 6px 9px; border-radius: 6px;
+    transform: translate(-50%, -110%); white-space: nowrap;
+    opacity: 0; transition: opacity 0.1s;
+  }
+  .tooltip.show { opacity: 1; }
+
+  .empty-state {
+    text-align: center; padding: 30px 16px; color: var(--text-secondary); font-size: 13px;
+  }
+  .empty-state .big { font-size: 28px; margin-bottom: 8px; }
+
+  .two-col { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+
+  .manual-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 10px; margin-top: 12px; }
+  .manual-panel label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+  .manual-panel input {
+    width: 100%; font: inherit; font-size: 14px; padding: 7px 9px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface-1); color: var(--text-primary);
+  }
+  .footnote { font-size: 11px; color: var(--text-muted); margin-top: 10px; line-height: 1.5; }
+  code { background: var(--gridline); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="viz-root wrap" id="app">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="mark"></div>
+      <div>
+        <h1 id="practiceName">Practice Health Dashboard</h1>
+        <p id="lastUpdated">—</p>
+      </div>
+    </div>
+    <div class="controls">
+      <span class="status-pill"><span class="dot" id="statusDot"></span><span id="statusText">Loading…</span></span>
+      <select id="monthSelect" aria-label="Select month"></select>
+      <button id="refreshBtn">Refresh</button>
+      <button id="themeBtn">Dark mode</button>
+    </div>
+  </div>
+
+  <section>
+    <h2>Funnel this month <span class="sub">Referrals → consults → scans → deliveries</span></h2>
+    <div class="tile-row" id="funnelTiles"></div>
+    <h2 style="margin-top:16px" id="funnelYtdLabel">Year to date</h2>
+    <div class="tile-row" id="funnelYtdTiles"></div>
+  </section>
+
+  <section>
+    <h2>Practice financial health <span class="sub">Billed → allowed → collected</span></h2>
+    <div class="tile-row" id="financeTiles"></div>
+    <div id="manualEntryWrap"></div>
+    <h2 style="margin-top:16px" id="financeYtdLabel">Year to date</h2>
+    <div class="tile-row" id="financeYtdTiles"></div>
+  </section>
+
+  <section class="two-col">
+    <div class="card chart-card">
+      <div class="chart-head">
+        <h2 style="margin:0">Referral funnel <span class="sub">this month</span></h2>
+        <button class="table-toggle" data-target="funnelTable">View data table</button>
+      </div>
+      <div id="funnelChart"></div>
+      <table class="data-table hidden" id="funnelTable"></table>
+    </div>
+    <div class="card chart-card">
+      <div class="chart-head">
+        <h2 style="margin:0">Referral sources <span class="sub">this month</span></h2>
+        <button class="table-toggle" data-target="sourceTable">View data table</button>
+      </div>
+      <div id="sourceChart"></div>
+      <table class="data-table hidden" id="sourceTable"></table>
+    </div>
+  </section>
+
+  <section>
+    <div class="card chart-card">
+      <div class="chart-head">
+        <h2 style="margin:0">Monthly trend <span class="sub">billed, allowed, collections</span></h2>
+        <div style="display:flex; align-items:center; gap:14px;">
+          <div class="legend" id="trendLegend"></div>
+          <button class="table-toggle" data-target="trendTable">View data table</button>
+        </div>
+      </div>
+      <div id="trendChart"></div>
+      <table class="data-table hidden" id="trendTable"></table>
+    </div>
+  </section>
+
+  <section>
+    <div class="card chart-card">
+      <div class="chart-head">
+        <h2 style="margin:0">Referral sources over time <span class="sub">new referrals by source, by month</span></h2>
+        <div style="display:flex; align-items:center; gap:14px;">
+          <div class="legend" id="stackLegend"></div>
+          <button class="table-toggle" data-target="stackTable">View data table</button>
+        </div>
+      </div>
+      <div id="stackChart"></div>
+      <table class="data-table hidden" id="stackTable"></table>
+    </div>
+  </section>
+
+  <p class="footnote" id="setupNote"></p>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+/* =========================================================================
+   CONFIG — copy this file per client and edit the block below.
+   ========================================================================= */
+const CONFIG = {
+  practiceName: "AZ Sleep — Pilot Dashboard",
+  // Paste the Apps Script /exec URL here once deployed (see Code.gs / setup
+  // guide). Leave blank to run on the bundled demo data below.
+  appsScriptUrl: "https://script.google.com/macros/s/AKfycbwuFffzEN55ExHwsgpJZQzaGvnFt-ogX6uOUOpHygAt4fcEMSYqyruQmmwe1CJ8O8jD5g/exec",
+  referralSourceLabel: "Specialist",
+  autoRefreshMinutes: 15,
+  currency: "USD"
+};
+
+/* Real numbers pulled from the practice's own intake log (the months with
+   solid data), used until a live Apps Script URL is connected. Financials
+   are intentionally empty — this practice enters those by hand each month
+   once EHR billing reports are pulled; add rows to your "Monthly
+   Financials" tab and they'll appear here automatically once connected. */
+const DEMO_DATA = {
+  generatedAt: new Date().toISOString(),
+  funnel: {
+    rows: [
+      {month:"2025-07", source:"Dental", newReferrals:5, consults:3, scans:1, deliveries:1, followups:0},
+      {month:"2025-07", source:"Neurology", newReferrals:7, consults:4, scans:1, deliveries:0, followups:0},
+      {month:"2025-07", source:"Primary Care", newReferrals:2, consults:1, scans:0, deliveries:0, followups:0},
+      {month:"2025-07", source:"Self/Online", newReferrals:6, consults:2, scans:1, deliveries:0, followups:0},
+      {month:"2025-07", source:"ENT", newReferrals:2, consults:1, scans:0, deliveries:0, followups:0},
+      {month:"2025-07", source:"Pain", newReferrals:1, consults:0, scans:0, deliveries:0, followups:0},
+      {month:"2025-07", source:"Sleep Clinic", newReferrals:2, consults:1, scans:0, deliveries:0, followups:0},
+      {month:"2025-07", source:"Cardiology", newReferrals:1, consults:0, scans:0, deliveries:0, followups:0},
+
+      {month:"2025-08", source:"Dental", newReferrals:9, consults:2, scans:2, deliveries:4, followups:0},
+      {month:"2025-08", source:"Primary Care", newReferrals:2, consults:1, scans:1, deliveries:0, followups:0},
+      {month:"2025-08", source:"Neurology", newReferrals:1, consults:0, scans:0, deliveries:1, followups:0},
+      {month:"2025-08", source:"ENT", newReferrals:1, consults:0, scans:1, deliveries:1, followups:0},
+
+      {month:"2025-09", source:"Dental", newReferrals:5, consults:0, scans:1, deliveries:3, followups:0},
+      {month:"2025-09", source:"ENT", newReferrals:3, consults:0, scans:0, deliveries:1, followups:0},
+      {month:"2025-09", source:"Primary Care", newReferrals:2, consults:0, scans:0, deliveries:1, followups:0},
+      {month:"2025-09", source:"Unknown", newReferrals:5, consults:0, scans:1, deliveries:2, followups:0},
+      {month:"2025-09", source:"STAFF", newReferrals:4, consults:1, scans:0, deliveries:2, followups:0},
+      {month:"2025-09", source:"Self/Online", newReferrals:3, consults:0, scans:1, deliveries:1, followups:0},
+      {month:"2025-09", source:"Neurology", newReferrals:2, consults:0, scans:0, deliveries:0, followups:0},
+
+      {month:"2025-10", source:"Dental", newReferrals:6, consults:1, scans:2, deliveries:4, followups:0},
+      {month:"2025-10", source:"Unknown", newReferrals:4, consults:2, scans:1, deliveries:2, followups:0},
+      {month:"2025-10", source:"ENT", newReferrals:2, consults:1, scans:1, deliveries:1, followups:0},
+      {month:"2025-10", source:"Self/Online", newReferrals:2, consults:1, scans:1, deliveries:2, followups:0},
+      {month:"2025-10", source:"Pain", newReferrals:1, consults:0, scans:0, deliveries:0, followups:0},
+      {month:"2025-10", source:"Neurology", newReferrals:1, consults:0, scans:1, deliveries:1, followups:0}
+    ]
+  },
+  financials: { rows: [] }
+};
+
+/* =========================================================================
+   Helpers
+   ========================================================================= */
+const $ = (sel, root=document) => root.querySelector(sel);
+const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+function fmtCompact(n) {
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  const abs = Math.abs(n);
+  if (abs >= 1e6) return (n/1e6).toFixed(1).replace(/\.0$/,'') + "M";
+  if (abs >= 1e3) return (n/1e3).toFixed(1).replace(/\.0$/,'') + "K";
+  return String(Math.round(n));
+}
+function fmtCurrency(n) {
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(n);
+  if (abs >= 1e6) return sign + "$" + (abs/1e6).toFixed(2) + "M";
+  if (abs >= 1e3) return sign + "$" + (abs/1e3).toFixed(1) + "K";
+  return sign + "$" + abs.toLocaleString(undefined,{maximumFractionDigits:0});
+}
+function fmtPct(n) {
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  return Math.round(n*100) + "%";
+}
+function niceMax(v) {
+  if (v <= 0) return 1;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(v)));
+  const residual = v / magnitude;
+  let niceResidual = residual <= 1 ? 1 : residual <= 2 ? 2 : residual <= 5 ? 5 : 10;
+  let result = niceResidual * magnitude;
+  if (result <= v) {
+    result = (niceResidual === 1 ? 2 : niceResidual === 2 ? 5 : niceResidual === 5 ? 10 : 20) * magnitude;
+  }
+  return result;
+}
+function monthLabel(ym) {
+  const [y,m] = ym.split("-").map(Number);
+  return new Date(y, m-1, 1).toLocaleDateString(undefined,{month:"short", year:"2-digit"});
+}
+
+const tooltip = $("#tooltip");
+function showTooltip(x, y, html) {
+  tooltip.innerHTML = html;
+  tooltip.style.left = x + "px";
+  tooltip.style.top = y + "px";
+  tooltip.classList.add("show");
+}
+function hideTooltip() { tooltip.classList.remove("show"); }
+
+/* =========================================================================
+   Data loading
+   ========================================================================= */
+let RAW = null;
+
+async function loadData() {
+  setStatus("loading", "Loading…");
+  if (CONFIG.appsScriptUrl && CONFIG.appsScriptUrl.trim()) {
+    try {
+      const res = await fetch(CONFIG.appsScriptUrl, {cache:"no-store"});
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const json = await res.json();
+      RAW = json;
+      setStatus("live", "Live — synced with Google Sheet");
+    } catch (err) {
+      console.warn("Live fetch failed, falling back to demo data:", err);
+      RAW = DEMO_DATA;
+      setStatus("error", "Couldn't reach Google Sheet — showing last known data");
+    }
+  } else {
+    RAW = DEMO_DATA;
+    setStatus("demo", "Demo data — connect a Google Sheet in CONFIG.appsScriptUrl");
+  }
+  render();
+}
+
+function setStatus(kind, text) {
+  $("#statusDot").className = "dot " + kind;
+  $("#statusText").textContent = text;
+}
+
+/* =========================================================================
+   Derived data
+   ========================================================================= */
+function getMonths() {
+  const set = new Set();
+  (RAW.funnel.rows||[]).forEach(r => set.add(r.month));
+  (RAW.financials.rows||[]).forEach(r => set.add(r.month));
+  return Array.from(set).sort();
+}
+
+function funnelForMonth(month) {
+  const rows = (RAW.funnel.rows||[]).filter(r => r.month === month);
+  const totals = {newReferrals:0, consults:0, scans:0, deliveries:0, followups:0};
+  rows.forEach(r => { for (const k in totals) totals[k] += (r[k]||0); });
+  return totals;
+}
+function financeForMonth(month) {
+  const row = (RAW.financials.rows||[]).find(r => r.month === month);
+  return row || null;
+}
+
+// Every month in the same calendar year as `month`, from January through
+// `month` inclusive (plain string compare works because months are always
+// "YYYY-MM").
+function ytdMonths(month) {
+  const year = month.slice(0, 4);
+  const months = getMonths();
+  return months.filter(m => m.slice(0, 4) === year && m <= month);
+}
+
+function funnelYtd(month) {
+  const rangeMonths = ytdMonths(month);
+  const totals = {newReferrals:0, consults:0, scans:0, deliveries:0, followups:0};
+  rangeMonths.forEach(m => {
+    const t = funnelForMonth(m);
+    for (const k in totals) totals[k] += t[k];
+  });
+  return { totals, rangeMonths };
+}
+
+function financeYtd(month) {
+  const rangeMonths = ytdMonths(month);
+  const totals = {billed:0, allowed:0, collections:0};
+  let anyData = false;
+  rangeMonths.forEach(m => {
+    const row = financeForMonth(m);
+    if (row) { anyData = true; totals.billed += row.billed; totals.allowed += row.allowed; totals.collections += row.collections; }
+  });
+  return { totals: anyData ? totals : null, rangeMonths };
+}
+
+function ytdRangeLabel(rangeMonths) {
+  if (!rangeMonths.length) return "";
+  const first = monthLabel(rangeMonths[0]), last = monthLabel(rangeMonths[rangeMonths.length-1]);
+  return first === last ? first : (first.split(" ")[0] + "–" + last);
+}
+
+/* =========================================================================
+   Render: header / status / month select
+   ========================================================================= */
+let currentMonth = null;
+
+function render() {
+  $("#practiceName").textContent = CONFIG.practiceName;
+  $("#lastUpdated").textContent = "Data as of " + new Date(RAW.generatedAt).toLocaleString();
+
+  const months = getMonths();
+  const sel = $("#monthSelect");
+  sel.innerHTML = months.map(m => `<option value="${m}">${monthLabel(m)}</option>`).join("");
+  if (!months.length) {
+    renderEmpty();
+    return;
+  }
+  if (!currentMonth || !months.includes(currentMonth)) currentMonth = months[months.length-1];
+  sel.value = currentMonth;
+
+  renderFunnelTiles(months);
+  renderFinanceTiles(months);
+  renderFunnelYtdTiles();
+  renderFinanceYtdTiles();
+  renderFunnelChart();
+  renderSourceChart();
+  renderTrendChart(months);
+  renderStackChart(months);
+
+  const note = CONFIG.appsScriptUrl ? "" :
+    "Showing demo data seeded from this practice's own intake log. Deploy the paired Apps Script (Code.gs) and paste its URL into CONFIG.appsScriptUrl to make this live.";
+  $("#setupNote").textContent = note;
+}
+
+function renderEmpty() {
+  ["funnelTiles","financeTiles","funnelYtdTiles","financeYtdTiles"].forEach(id => {
+    $("#"+id).innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="big">No data yet</div>Connect your Google Sheet or add rows to get started.</div>`;
+  });
+  $("#funnelYtdLabel").classList.add("hidden");
+  $("#financeYtdLabel").classList.add("hidden");
+}
+
+/* =========================================================================
+   Stat tiles
+   ========================================================================= */
+function deltaTile(curr, prev) {
+  if (prev === null || prev === undefined || isNaN(prev) || prev === 0) {
+    return `<div class="delta flat">No prior month</div>`;
+  }
+  const diff = curr - prev;
+  const pct = (diff/Math.abs(prev))*100;
+  const dir = diff > 0 ? "up" : diff < 0 ? "down" : "flat";
+  const arrow = diff > 0 ? "▲" : diff < 0 ? "▼" : "•";
+  return `<div class="delta ${dir}">${arrow} ${Math.abs(pct).toFixed(0)}% vs last month</div>`;
+}
+
+function renderFunnelTiles(months) {
+  const idx = months.indexOf(currentMonth);
+  const curr = funnelForMonth(currentMonth);
+  const prev = idx > 0 ? funnelForMonth(months[idx-1]) : null;
+
+  const tiles = [
+    {label:"New referrals", key:"newReferrals"},
+    {label:"Consults scheduled", key:"consults"},
+    {label:"Scans started", key:"scans"},
+    {label:"Deliveries", key:"deliveries"},
+    {label:"3-mo follow-ups", key:"followups"}
+  ];
+  $("#funnelTiles").innerHTML = tiles.map(t => `
+    <div class="tile">
+      <div class="label">${t.label}</div>
+      <div class="value">${fmtCompact(curr[t.key])}</div>
+      ${deltaTile(curr[t.key], prev ? prev[t.key] : null)}
+    </div>
+  `).join("");
+}
+
+function renderFinanceTiles(months) {
+  const idx = months.indexOf(currentMonth);
+  const curr = financeForMonth(currentMonth);
+  const prevRow = idx > 0 ? financeForMonth(months[idx-1]) : null;
+
+  const manualWrap = $("#manualEntryWrap");
+  if (!curr) {
+    $("#financeTiles").innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="big">No billing data for ${monthLabel(currentMonth)}</div>
+      Add a row to your "Monthly Financials" tab (or enter it below just to preview the dashboard).
+    </div>`;
+    manualWrap.innerHTML = `
+      <div class="card manual-panel">
+        <div><label>Billed amount</label><input type="number" id="manBilled" placeholder="0"></div>
+        <div><label>Allowed amount</label><input type="number" id="manAllowed" placeholder="0"></div>
+        <div><label>Collections</label><input type="number" id="manCollections" placeholder="0"></div>
+        <div style="align-self:end"><button class="primary" id="manApply">Preview this month</button></div>
+      </div>
+      <p class="footnote">This preview is temporary and won't be saved — it's here so you can see what the dashboard looks like before your first month of live billing data comes in.</p>
+    `;
+    $("#manApply").onclick = () => {
+      const b = Number($("#manBilled").value)||0;
+      const a = Number($("#manAllowed").value)||0;
+      const c = Number($("#manCollections").value)||0;
+      RAW.financials.rows = RAW.financials.rows.filter(r=>r.month!==currentMonth);
+      RAW.financials.rows.push({month: currentMonth, billed:b, allowed:a, collections:c});
+      render();
+    };
+    return;
+  }
+  manualWrap.innerHTML = "";
+
+  const collectionRate = curr.allowed ? curr.collections/curr.allowed : null;
+  const allowedRate = curr.billed ? curr.allowed/curr.billed : null;
+
+  const tiles = [
+    {label:"Billed amount", val: fmtCurrency(curr.billed), delta: deltaTile(curr.billed, prevRow?prevRow.billed:null)},
+    {label:"Allowed amount", val: fmtCurrency(curr.allowed), delta: deltaTile(curr.allowed, prevRow?prevRow.allowed:null), rate: allowedRate!==null?`${fmtPct(allowedRate)} of billed`:""},
+    {label:"Collections", val: fmtCurrency(curr.collections), delta: deltaTile(curr.collections, prevRow?prevRow.collections:null), rate: collectionRate!==null?`${fmtPct(collectionRate)} of allowed`:""},
+  ];
+  $("#financeTiles").innerHTML = tiles.map(t => `
+    <div class="tile">
+      <div class="label">${t.label}</div>
+      <div class="value">${t.val}</div>
+      ${t.delta}
+      ${t.rate ? `<div class="rate">${t.rate}</div>` : ""}
+    </div>
+  `).join("");
+}
+
+function renderFunnelYtdTiles() {
+  const { totals, rangeMonths } = funnelYtd(currentMonth);
+  $("#funnelYtdLabel").classList.remove("hidden");
+  $("#funnelYtdLabel").innerHTML = `Year to date <span class="sub">${ytdRangeLabel(rangeMonths)}</span>`;
+
+  const tiles = [
+    {label:"New referrals", key:"newReferrals"},
+    {label:"Consults scheduled", key:"consults"},
+    {label:"Scans started", key:"scans"},
+    {label:"Deliveries", key:"deliveries"},
+    {label:"3-mo follow-ups", key:"followups"}
+  ];
+  $("#funnelYtdTiles").innerHTML = tiles.map(t => `
+    <div class="tile">
+      <div class="label">${t.label}</div>
+      <div class="value">${fmtCompact(totals[t.key])}</div>
+    </div>
+  `).join("");
+}
+
+function renderFinanceYtdTiles() {
+  const { totals, rangeMonths } = financeYtd(currentMonth);
+  $("#financeYtdLabel").classList.remove("hidden");
+  $("#financeYtdLabel").innerHTML = `Year to date <span class="sub">${ytdRangeLabel(rangeMonths)}</span>`;
+
+  if (!totals) {
+    $("#financeYtdTiles").innerHTML = `<div class="empty-state" style="grid-column:1/-1">No billing data yet this year</div>`;
+    return;
+  }
+  const collectionRate = totals.allowed ? totals.collections/totals.allowed : null;
+  const allowedRate = totals.billed ? totals.allowed/totals.billed : null;
+
+  const tiles = [
+    {label:"Billed amount", val: fmtCurrency(totals.billed)},
+    {label:"Allowed amount", val: fmtCurrency(totals.allowed), rate: allowedRate!==null?`${fmtPct(allowedRate)} of billed`:""},
+    {label:"Collections", val: fmtCurrency(totals.collections), rate: collectionRate!==null?`${fmtPct(collectionRate)} of allowed`:""},
+  ];
+  $("#financeYtdTiles").innerHTML = tiles.map(t => `
+    <div class="tile">
+      <div class="label">${t.label}</div>
+      <div class="value">${t.val}</div>
+      ${t.rate ? `<div class="rate">${t.rate}</div>` : ""}
+    </div>
+  `).join("");
+}
+
+/* =========================================================================
+   Chart: funnel (bar)
+   ========================================================================= */
+function renderFunnelChart() {
+  const curr = funnelForMonth(currentMonth);
+  const stages = [
+    {label:"Referrals", val: curr.newReferrals},
+    {label:"Consults", val: curr.consults},
+    {label:"Scans", val: curr.scans},
+    {label:"Deliveries", val: curr.deliveries}
+  ];
+  const w = 500, h = 230, padL = 40, padB = 30, padT = 34, padR = 10;
+  const plotW = w - padL - padR, plotH = h - padT - padB;
+  const max = niceMax(Math.max(1, ...stages.map(s=>s.val)));
+  const bw = Math.min(64, plotW/stages.length * 0.5);
+  const gap = plotW/stages.length;
+
+  let bars = "", axisLabels = "", gridLines = "";
+  const ticks = 4;
+  for (let i=0;i<=ticks;i++) {
+    const v = Math.round(max*i/ticks);
+    const y = padT + plotH - (v/max)*plotH;
+    gridLines += `<line class="grid-line" x1="${padL}" x2="${w-padR}" y1="${y}" y2="${y}"/>`;
+    gridLines += `<text x="${padL-8}" y="${y+3}" text-anchor="end">${fmtCompact(v)}</text>`;
+  }
+  stages.forEach((s,i) => {
+    const x = padL + gap*i + gap/2 - bw/2;
+    const barH = (s.val/max)*plotH;
+    const y = padT + plotH - barH;
+    const conv = i>0 && stages[i-1].val>0 ? Math.round((s.val/stages[i-1].val)*100) : null;
+    bars += `<rect data-i="${i}" x="${x}" y="${y}" width="${bw}" height="${Math.max(barH,1)}" rx="4" fill="var(--series-1)" style="cursor:pointer"/>`;
+    bars += `<text class="val-label" x="${x+bw/2}" y="${y-8}" text-anchor="middle">${fmtCompact(s.val)}</text>`;
+    axisLabels += `<text x="${x+bw/2}" y="${h-8}" text-anchor="middle">${s.label}</text>`;
+    if (conv !== null) {
+      axisLabels += `<text x="${x+bw/2}" y="${h-20}" text-anchor="middle" fill="var(--text-muted)" style="font-size:10px">${conv}%→</text>`;
+    }
+  });
+
+  $("#funnelChart").innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}">${gridLines}${bars}${axisLabels}<line class="axis-line" x1="${padL}" x2="${w-padR}" y1="${padT+plotH}" y2="${padT+plotH}"/></svg>`;
+
+  $$("#funnelChart rect").forEach((rect,i) => {
+    rect.addEventListener("mousemove", (e) => {
+      const s = stages[i];
+      const rectBox = rect.getBoundingClientRect();
+      showTooltip(rectBox.left + rectBox.width/2, rectBox.top, `<strong>${s.label}</strong>: ${s.val}`);
+    });
+    rect.addEventListener("mouseleave", hideTooltip);
+  });
+
+  $("#funnelTable").innerHTML = `<tr><th>Stage</th><th class="num">Count</th><th class="num">Conversion</th></tr>` +
+    stages.map((s,i) => {
+      const conv = i>0 && stages[i-1].val>0 ? fmtPct(s.val/stages[i-1].val) : "—";
+      return `<tr><td>${s.label}</td><td class="num">${s.val}</td><td class="num">${conv}</td></tr>`;
+    }).join("");
+}
+
+/* =========================================================================
+   Chart: referral sources this month (horizontal bar, sequential)
+   ========================================================================= */
+function renderSourceChart() {
+  const rows = (RAW.funnel.rows||[]).filter(r => r.month === currentMonth)
+    .slice().sort((a,b) => b.newReferrals - a.newReferrals);
+
+  if (!rows.length) {
+    $("#sourceChart").innerHTML = `<div class="empty-state">No referral data for this month</div>`;
+    $("#sourceTable").innerHTML = "";
+    return;
+  }
+
+  const top = rows.slice(0,6);
+  const restTotal = rows.slice(6).reduce((s,r)=>s+r.newReferrals,0);
+  const bars = restTotal > 0 ? top.concat([{source:"Other", newReferrals:restTotal}]) : top;
+
+  const w = 500, rowH = 28, padL = 110, padR = 40, padT = 10, padB = 10;
+  const h = padT + padB + bars.length*rowH;
+  const plotW = w - padL - padR;
+  const max = Math.max(1, ...bars.map(b=>b.newReferrals));
+
+  let rects = "";
+  bars.forEach((b,i) => {
+    const y = padT + i*rowH;
+    const barW = (b.newReferrals/max)*plotW;
+    rects += `<text x="${padL-10}" y="${y+rowH/2+4}" text-anchor="end">${b.source}</text>`;
+    rects += `<rect data-i="${i}" x="${padL}" y="${y+5}" width="${Math.max(barW,2)}" height="${rowH-10}" rx="4" fill="var(--series-1)" style="cursor:pointer"/>`;
+    rects += `<text class="val-label" x="${padL+barW+8}" y="${y+rowH/2+4}">${b.newReferrals}</text>`;
+  });
+
+  $("#sourceChart").innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}">${rects}</svg>`;
+
+  $$("#sourceChart rect").forEach((rect,i) => {
+    rect.addEventListener("mousemove", () => {
+      const b = bars[i];
+      const box = rect.getBoundingClientRect();
+      showTooltip(box.left+box.width/2, box.top, `<strong>${b.source}</strong>: ${b.newReferrals} referrals`);
+    });
+    rect.addEventListener("mouseleave", hideTooltip);
+  });
+
+  $("#sourceTable").innerHTML = `<tr><th>Source</th><th class="num">New referrals</th></tr>` +
+    bars.map(b => `<tr><td>${b.source}</td><td class="num">${b.newReferrals}</td></tr>`).join("");
+}
+
+/* =========================================================================
+   Chart: monthly financial trend (multi-line)
+   ========================================================================= */
+function renderTrendChart(months) {
+  const series = [
+    {key:"billed", label:"Billed", color:"var(--series-1)"},
+    {key:"allowed", label:"Allowed", color:"var(--series-2)"},
+    {key:"collections", label:"Collections", color:"var(--series-3)"}
+  ];
+  const data = months.map(m => financeForMonth(m));
+  const hasAny = data.some(d => d);
+
+  $("#trendLegend").innerHTML = series.map(s => `<div class="item"><span class="swatch" style="background:${s.color}"></span>${s.label}</div>`).join("");
+
+  if (!hasAny) {
+    $("#trendChart").innerHTML = `<div class="empty-state"><div class="big">No billing history yet</div>Add rows to your Monthly Financials tab as each month closes.</div>`;
+    $("#trendTable").innerHTML = "";
+    return;
+  }
+
+  const w = 1080, h = 260, padL = 56, padR = 20, padT = 20, padB = 30;
+  const plotW = w-padL-padR, plotH = h-padT-padB;
+  const allVals = data.flatMap(d => d ? [d.billed,d.allowed,d.collections] : []);
+  const max = niceMax(Math.max(1, ...allVals));
+  const stepX = months.length>1 ? plotW/(months.length-1) : 0;
+
+  let gridLines = "";
+  const ticks=4;
+  for (let i=0;i<=ticks;i++) {
+    const v = Math.round(max*i/ticks);
+    const y = padT + plotH - (v/max)*plotH;
+    gridLines += `<line class="grid-line" x1="${padL}" x2="${w-padR}" y1="${y}" y2="${y}"/>`;
+    gridLines += `<text x="${padL-8}" y="${y+3}" text-anchor="end">${fmtCurrency(v)}</text>`;
+  }
+  let xLabels = "";
+  months.forEach((m,i) => {
+    const x = padL + stepX*i;
+    xLabels += `<text x="${x}" y="${h-8}" text-anchor="middle">${monthLabel(m)}</text>`;
+  });
+
+  let lines = "";
+  series.forEach(s => {
+    let path = "";
+    let dots = "";
+    months.forEach((m,i) => {
+      const d = data[i];
+      if (!d) return;
+      const x = padL + stepX*i;
+      const y = padT + plotH - (d[s.key]/max)*plotH;
+      path += (path? "L":"M") + x + " " + y + " ";
+      dots += `<circle class="pt" data-series="${s.key}" data-i="${i}" cx="${x}" cy="${y}" r="4" fill="${s.color}" stroke="var(--surface-1)" stroke-width="2" style="cursor:pointer"/>`;
+    });
+    lines += `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    lines += dots;
+  });
+
+  $("#trendChart").innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}">${gridLines}${lines}${xLabels}<line class="axis-line" x1="${padL}" x2="${w-padR}" y1="${padT+plotH}" y2="${padT+plotH}"/></svg>`;
+
+  $$("#trendChart .pt").forEach(dot => {
+    dot.addEventListener("mousemove", () => {
+      const i = +dot.dataset.i, key = dot.dataset.series;
+      const d = data[i];
+      const label = series.find(s=>s.key===key).label;
+      const box = dot.getBoundingClientRect();
+      showTooltip(box.left+box.width/2, box.top, `<strong>${monthLabel(months[i])}</strong> ${label}: ${fmtCurrency(d[key])}`);
+    });
+    dot.addEventListener("mouseleave", hideTooltip);
+  });
+
+  $("#trendTable").innerHTML = `<tr><th>Month</th><th class="num">Billed</th><th class="num">Allowed</th><th class="num">Collections</th><th class="num">Collection rate</th></tr>` +
+    months.map((m,i) => {
+      const d = data[i];
+      if (!d) return `<tr><td>${monthLabel(m)}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`;
+      const rate = d.allowed ? fmtPct(d.collections/d.allowed) : "—";
+      return `<tr><td>${monthLabel(m)}</td><td class="num">${fmtCurrency(d.billed)}</td><td class="num">${fmtCurrency(d.allowed)}</td><td class="num">${fmtCurrency(d.collections)}</td><td class="num">${rate}</td></tr>`;
+    }).join("");
+}
+
+/* =========================================================================
+   Chart: referral sources over time (stacked bar)
+   ========================================================================= */
+function renderStackChart(months) {
+  const bySrc = {};
+  (RAW.funnel.rows||[]).forEach(r => {
+    bySrc[r.source] = (bySrc[r.source]||0) + r.newReferrals;
+  });
+  const topSources = Object.entries(bySrc).sort((a,b)=>b[1]-a[1]).slice(0,6).map(e=>e[0]);
+  const palette = ["var(--series-1)","var(--series-2)","var(--series-3)","var(--series-4)","var(--series-5)","var(--series-6)"];
+  const colorFor = (src) => {
+    const idx = topSources.indexOf(src);
+    return idx >= 0 ? palette[idx] : "var(--series-other)";
+  };
+  const seriesList = topSources.concat(["Other"]);
+
+  $("#stackLegend").innerHTML = seriesList.map(s => `<div class="item"><span class="swatch" style="background:${colorFor(s)}"></span>${s}</div>`).join("");
+
+  const monthTotals = months.map(m => {
+    const rows = (RAW.funnel.rows||[]).filter(r=>r.month===m);
+    const bucket = {};
+    seriesList.forEach(s=>bucket[s]=0);
+    rows.forEach(r => {
+      const key = topSources.includes(r.source) ? r.source : "Other";
+      bucket[key] += r.newReferrals;
+    });
+    return bucket;
+  });
+  const maxTotal = niceMax(Math.max(1, ...monthTotals.map(b => Object.values(b).reduce((a,c)=>a+c,0))));
+
+  const w = 1080, h = 260, padL = 46, padR = 20, padT = 20, padB = 30;
+  const plotW = w-padL-padR, plotH = h-padT-padB;
+  const bw = Math.min(48, plotW/months.length*0.55);
+  const gap = plotW/months.length;
+
+  let gridLines="";
+  const ticks=4;
+  for (let i=0;i<=ticks;i++) {
+    const v = Math.round(maxTotal*i/ticks);
+    const y = padT + plotH - (v/maxTotal)*plotH;
+    gridLines += `<line class="grid-line" x1="${padL}" x2="${w-padR}" y1="${y}" y2="${y}"/>`;
+    gridLines += `<text x="${padL-8}" y="${y+3}" text-anchor="end">${v}</text>`;
+  }
+
+  let bars="", xLabels="";
+  months.forEach((m,i) => {
+    const x = padL + gap*i + gap/2 - bw/2;
+    let yCursor = padT + plotH;
+    seriesList.forEach(s => {
+      const val = monthTotals[i][s];
+      if (!val) return;
+      const segH = (val/maxTotal)*plotH;
+      yCursor -= segH;
+      bars += `<rect data-month="${m}" data-src="${s}" data-val="${val}" x="${x}" y="${yCursor+1}" width="${bw}" height="${Math.max(segH-2,0)}" fill="${colorFor(s)}" style="cursor:pointer"/>`;
+    });
+    xLabels += `<text x="${x+bw/2}" y="${h-8}" text-anchor="middle">${monthLabel(m)}</text>`;
+  });
+
+  $("#stackChart").innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}">${gridLines}${bars}${xLabels}<line class="axis-line" x1="${padL}" x2="${w-padR}" y1="${padT+plotH}" y2="${padT+plotH}"/></svg>`;
+
+  $$("#stackChart rect").forEach(rect => {
+    rect.addEventListener("mousemove", () => {
+      const box = rect.getBoundingClientRect();
+      showTooltip(box.left+box.width/2, box.top, `<strong>${monthLabel(rect.dataset.month)}</strong> ${rect.dataset.src}: ${rect.dataset.val}`);
+    });
+    rect.addEventListener("mouseleave", hideTooltip);
+  });
+
+  $("#stackTable").innerHTML = `<tr><th>Month</th>${seriesList.map(s=>`<th class="num">${s}</th>`).join("")}<th class="num">Total</th></tr>` +
+    months.map((m,i) => {
+      const b = monthTotals[i];
+      const total = Object.values(b).reduce((a,c)=>a+c,0);
+      return `<tr><td>${monthLabel(m)}</td>${seriesList.map(s=>`<td class="num">${b[s]}</td>`).join("")}<td class="num">${total}</td></tr>`;
+    }).join("");
+}
+
+/* =========================================================================
+   Wiring
+   ========================================================================= */
+$("#monthSelect").addEventListener("change", (e) => { currentMonth = e.target.value; render(); });
+$("#refreshBtn").addEventListener("click", loadData);
+$("#themeBtn").addEventListener("click", () => {
+  const root = document.documentElement;
+  const isDark = root.getAttribute("data-theme") === "dark";
+  root.setAttribute("data-theme", isDark ? "light" : "dark");
+  $("#themeBtn").textContent = isDark ? "Dark mode" : "Light mode";
+});
+document.addEventListener("click", (e) => {
+  if (e.target.classList.contains("table-toggle")) {
+    const target = document.getElementById(e.target.dataset.target);
+    target.classList.toggle("hidden");
+    e.target.textContent = target.classList.contains("hidden") ? "View data table" : "Hide data table";
+  }
+});
+
+loadData();
+if (CONFIG.autoRefreshMinutes > 0) {
+  setInterval(loadData, CONFIG.autoRefreshMinutes * 60 * 1000);
+}
+</script>
+</body>
+</html>
